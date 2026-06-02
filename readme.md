@@ -19,3 +19,6 @@ After 2e7 env steps of training, gait should be clean, and reward is about 28
 (The home-made ppo might print out meaningless statistics before all environments complete at least 1 episode. You might see 0 epi length/reward at the begining of each training stage.)
 
 It takes ~4 hours for 2e7 env steps of training on a M1 Macbook Pro.
+
+
+<video src="https://github.com/bstars/Go2Track/blob/main/record.mov" controls width="800"></video>
