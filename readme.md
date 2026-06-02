@@ -21,4 +21,6 @@ After 2e7 env steps of training, gait should be clean, and reward is about 28
 It takes ~4 hours for 2e7 env steps of training on a M1 Macbook Pro.
 
 
-<video src="https://github.com/bstars/Go2Track/blob/main/record.gif" controls width="800"></video>
+<p>
+  <img width="35%" src="https://github.com/bstars/Go2Track/blob/main/record.gif">
+</p>
