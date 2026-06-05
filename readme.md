@@ -24,3 +24,10 @@ It takes ~4 hours for 2e7 env steps of training on a M1 Macbook Pro.
 <p>
   <img width="100%" src="https://github.com/bstars/Go2Track/blob/main/record.gif">
 </p>
+
+
+
+Zero-shot navigation using GPT:
+<p>
+  <img width="100%" src="https://github.com/bstars/Go2Track/blob/main/navigate.png">
+</p>
