@@ -1,0 +1,39 @@
+<mujoco model="go2 obstacle scene">
+  <include file="go2.xml"/>
+
+  <statistic center="1.5 0 0.1" extent="4.0"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="-130" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="8 8" reflectance="0.2"/>
+    <material name="obstacle_gray" rgba="0.45 0.48 0.50 1"/>
+    <material name="obstacle_blue" rgba="0.10 0.30 0.65 1"/>
+    <material name="target_red" rgba="1.0 0.02 0.02 1" emission="0.2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 3.0" dir="0 0 -1" directional="true"/>
+    <light pos="2 -3 2.5" dir="-0.4 0.5 -1" directional="true" diffuse="0.4 0.4 0.4"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- Static obstacles form a staggered slalom, blocking the direct path while leaving side gaps. -->
+    <geom name="obstacle_cylinder_center_1" type="cylinder" pos="1.0 0.25 0.20" size="0.20 0.20" material="obstacle_gray"/>
+    <geom name="obstacle_cylinder_left_1" type="cylinder" pos="1.75 0.95 0.23" size="0.20 0.23" material="obstacle_gray"/>
+    <geom name="obstacle_cylinder_right_1" type="cylinder" pos="2.25 -0.75 0.23" size="0.20 0.23" material="obstacle_gray"/>
+    <geom name="obstacle_cylinder_center_2" type="cylinder" pos="2.95 -0.25 0.20" size="0.20 0.20" material="obstacle_gray"/>
+    <geom name="obstacle_cylinder_left_2" type="cylinder" pos="3.55 0.85 0.25" size="0.20 0.25" material="obstacle_gray"/>
+    <geom name="obstacle_cylinder_right_2" type="cylinder" pos="3.85 -0.85 0.20" size="0.20 0.20" material="obstacle_gray"/>
+
+    <!-- Visual goal marker. Collision is disabled so reaching the target does not trip the robot. -->
+    <geom name="red_target_base" type="cylinder" pos="4.2 0.0 0.03" size="0.22 0.03" material="target_red" contype="0" conaffinity="0"/>
+    <geom name="red_target" type="sphere" pos="4.2 0.0 0.35" size="0.18" material="target_red" contype="0" conaffinity="0"/>
+  </worldbody>
+</mujoco>
