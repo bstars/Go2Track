@@ -1,157 +1,115 @@
+
 import os
-import sys
-import time
-import matplotlib.pyplot as plt
-
-
-import glfw
-import mujoco
 import numpy as np
-import torch
-
-from ppo import PPO_Clip
-from env import Go2Env
-
-actor_dim=[512, 256, 128]
-critic_dim=[512, 256, 128]
-
-env = Go2Env()
-state, _ = env.reset()
-ppo = PPO_Clip(
-    [env], 
-    actor_dim=actor_dim,
-    critic_dim=critic_dim,
-    init_log_std=-0.,
-    tanh_transformed=False,
-    learning_rate=2e-4,
-    n_steps=128,
-    batch_size=2048,
-    n_epochs=10,
-    gamma=0.99,
-    gae_lambda=0.95,
-    clip_range=0.2,
-    ent_coef=0.,
-    vf_coef=0.5,
-    max_grad_norm=1.,
-    # target_kl=0.05,
-)
-
-ppo.load("./ppo.pth")
-
-fpv_cam_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_CAMERA, "fpv")
-glfw.init()
-window = glfw.create_window(1280, 720, "Go2 Third Person + FPV", None, None)
-glfw.make_context_current(window)
-glfw.swap_interval(1)
-option = mujoco.MjvOption()
-scene = mujoco.MjvScene(env.model, maxgeom=10000)
-context = mujoco.MjrContext(env.model, mujoco.mjtFontScale.mjFONTSCALE_150)
-
-third_cam = mujoco.MjvCamera()
-third_cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-third_cam.distance = 3.0
-third_cam.azimuth = 90.0
-third_cam.elevation = -20.0
+from typing import List, Callable, Tuple
+from openai import OpenAI
+import base64
+from io import BytesIO
+from PIL import Image
+import cv2
+import re
 
 
-fpv_cam = mujoco.MjvCamera()
-fpv_cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
-fpv_cam.fixedcamid = fpv_cam_id
+from prompt import react_navigation_system_prompt_template 
 
 
-def execute_command(command, dt):
-    global state
-    state[-3:] = command
-    state_th = torch.from_numpy(state)
-    state_th = ppo.running_stat.normalize(state_th)[None,:]
-    normal, action_th, _ = ppo.pi(state_th)
-    # action = action_th[0].detach().numpy()
-    action = normal.mean[0].detach().numpy()
+def np_rgb_img_to_data_url(img):
+    if img.dtype != np.uint8:
+        img = (img * 255).clip(0, 255).astype(np.uint8)
 
-    for _ in range(int(dt / env.dt)):
-        frame_start = time.time()
-        state, reward, terminated, truncated, info = env.step(action)
-        width, height = glfw.get_framebuffer_size(window)
-        half_width = width // 2
-        left_viewport = mujoco.MjrRect(0, 0, half_width, height)
-        right_viewport = mujoco.MjrRect(half_width, 0, width - half_width, height)
+    pil_img = Image.fromarray(img, mode="RGB")
 
-        mujoco.mjr_setBuffer(mujoco.mjtFramebuffer.mjFB_WINDOW, context)
-        mujoco.mjr_rectangle(mujoco.MjrRect(0, 0, width, height), 0.05, 0.05, 0.05, 1.0)
+    buffer = BytesIO()
+    pil_img.save(buffer, format="JPEG")
 
-        third_cam.lookat[:] = env.data.qpos[:3]
+    b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}"
 
-        mujoco.mjv_updateScene(
-            env.model,
-            env.data,
-            option,
-            None,
-            third_cam,
-            mujoco.mjtCatBit.mjCAT_ALL,
-            scene,
+class ReActAgent:
+    def __init__(self, model:str) -> None:
+        self.model = model
+        self.client = OpenAI(api_key="your-api-key")
+
+    def call_model(self, messages):
+
+        print("requesting model ...")
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
         )
-        mujoco.mjr_render(left_viewport, scene, context)
+        content = response.choices[0].message.content
+        messages.append({"role": "assistant", "content": content})
+        return content
 
-        mujoco.mjv_updateScene(
-            env.model,
-            env.data,
-            option,
-            None,
-            fpv_cam,
-            mujoco.mjtCatBit.mjCAT_ALL,
-            scene,
-        )
-        mujoco.mjr_render(right_viewport, scene, context)
+    def run(self, user_input:str, fpv_img, third_person_img, execute_command, max_steps=100):
+        messages = [
+            {"role": "system", "content": react_navigation_system_prompt_template},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"<question>{user_input} The initial third-person-view are attached.</question>"
+                    },
+                    # {
+                    #     "type": "image_url",
+                    #     "image_url": {"url": np_rgb_img_to_data_url(fpv_img)}
+                    # },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": np_rgb_img_to_data_url(third_person_img)}
+                    }
+                ]
+            }
+        ]
 
+        for _ in range(max_steps):
+            print("----------------------------------------------------------------------------------------")
+            content = self.call_model(messages)
 
-        mujoco.mjr_overlay(
-            mujoco.mjtFontScale.mjFONTSCALE_150,
-            mujoco.mjtGridPos.mjGRID_TOPLEFT,
-            right_viewport,
-            "Third person",
-            "",
-            context,
-        )
-        mujoco.mjr_overlay(
-            mujoco.mjtFontScale.mjFONTSCALE_150,
-            mujoco.mjtGridPos.mjGRID_TOPLEFT,
-            right_viewport,
-            "FPV",
-            "",
-            context,
-        )
-        mujoco.mjr_overlay(
-            mujoco.mjtFontScale.mjFONTSCALE_150,
-            mujoco.mjtGridPos.mjGRID_BOTTOMLEFT,
-            left_viewport,
-            "command",
-            f"x {command[0]:.2f}  y {command[1]:.2f}  yaw {command[2]:.2f}",
-            context,
-        )
+            thought_match = re.search(r"<thought>(.*?)</thought>", content, re.DOTALL)
+            if thought_match:
+                thought = thought_match.group(1).strip()
+                print(f"Thought: {thought}")
 
-        rgb = np.empty((height, width - half_width, 3), dtype=np.uint8)
-        depth = np.empty((height, width - half_width), dtype=np.float32)
-        mujoco.mjr_readPixels(rgb, depth, right_viewport, context)
-        fpv_image = np.flipud(rgb).copy()
+            if "<final_answer>" in content:
+                return content
 
-        glfw.swap_buffers(window)
-        glfw.poll_events()
+            action_match = re.search(
+                r"<action>\s*move\(([^,]+),([^,]+),([^)]+)\)\s*</action>",
+                content,
+                re.DOTALL,
+            )
 
-        elapsed = time.time() - frame_start
-        if elapsed < env.dt:
-            time.sleep(env.dt - elapsed)
-    
-    
-    return fpv_image
+            if not action_match:
+                raise RuntimeError(f"No valid action found in model response: {content}")
 
-try:
-    while not glfw.window_should_close(window):
-        fpv_image = execute_command(env.commands["forward"].astype(np.float32).copy(), env.dt)
-        plt.imshow(fpv_image)
-        plt.show()
+            vx, vy, omega = map(float, action_match.groups())
+            command = np.array([vx, vy, omega], dtype=np.float32)
+            print(f"action", command)
+            
+            fpv_img, third_person_img = execute_command(command)
 
-finally:
-        context.free()
-        glfw.destroy_window(window)
-        glfw.terminate()
-        env.close()
+            messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "<observation>"
+                            "The new third-person-view after executing the movement are attached."
+                            "</observation>"
+                        )
+                    },
+                    # {
+                    #     "type": "image_url",
+                    #     "image_url": {"url": np_rgb_img_to_data_url(fpv_img)}
+                    # },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": np_rgb_img_to_data_url(third_person_img)}
+                    }
+                ]
+            })
+
+        return "<final_answer>Stopped because max_steps was reached.</final_answer>"
