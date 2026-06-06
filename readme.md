@@ -1,4 +1,6 @@
 This repository trains a velocity tracking policy on a Unitree Go2 Quadruped using a home-made PPO algorithm.
+Thank Codex for the great help!!
+
 The robot model is from [mujoco model gallery](https://github.com/google-deepmind/mujoco_menagerie/tree/main/unitree_go2)
 
 Training: 
