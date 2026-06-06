@@ -59,6 +59,13 @@ fpv_cam = mujoco.MjvCamera()
 fpv_cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
 fpv_cam.fixedcamid = fpv_cam_id
 
+def quat_to_yaw(q):
+    w, x, y, z = q
+    return np.arctan2(
+        2.0 * (w * z + x * y),
+        1.0 - 2.0 * (y * y + z * z),
+    )
+
 
 def execute_command(command, dt=1.):
     global state
@@ -86,7 +93,14 @@ def execute_command(command, dt=1.):
         mujoco.mjr_setBuffer(mujoco.mjtFramebuffer.mjFB_WINDOW, context)
         mujoco.mjr_rectangle(mujoco.MjrRect(0, 0, width, height), 0.05, 0.05, 0.05, 1.0)
 
-        third_cam.lookat[:] = env.data.qpos[:3]
+        robot_pos = env.data.qpos[:3]
+        robot_yaw = quat_to_yaw(env.data.qpos[3:7])
+
+        third_cam.lookat[:] = robot_pos
+        third_cam.azimuth = np.degrees(robot_yaw)
+        third_cam.elevation = -60.0
+        third_cam.distance = 4.0
+
 
         mujoco.mjv_updateScene(
             env.model,
@@ -157,8 +171,9 @@ def execute_command(command, dt=1.):
     return fpv_image, third_person_image
 
 try:
-    agent = ReActAgent("gpt-5.5")
-    # agent = ReActAgent("gpt-5.4")
+    agent = ReActAgent("gpt-5.5", reasoning="medium")
+    # agent = ReActAgent("gpt-5.4-mini", reasoning="high")
+
 
     fpv_image, third_person_image = execute_command(env.commands["stand"].astype(np.float32).copy(), env.dt)
     # fig, (ax1, ax2) = plt.subplots(1,2)
@@ -172,13 +187,6 @@ try:
         execute_command=execute_command,
     )
 
-    # print(result)
-
-    # while not glfw.window_should_close(window):
-    #     execute_command(
-    #         np.array([0.0, 0.0, 0.0], dtype=np.float32),
-    #         dt=1.,
-    #     )
 
 finally:
         context.free()
